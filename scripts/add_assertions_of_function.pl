@@ -50,7 +50,7 @@ if ($mode eq 'all') {
 
     $dbf->drop_table( tbl => "roles" );
     $dbf->create_table( tbl  => "roles",
-                        flds => "prot varchar(64), role varchar(255),"  .
+                        flds => "prot varchar(64), role varchar(1024),"  .
                                 "made_by varchar(32), org varchar(64)"
             );
 }
@@ -158,7 +158,7 @@ foreach $_ (&files_with_assignments($mode, @genomes))
                         "$prot_id\t$made_by\t$assigned_function\t$quality\t$org\t\\N\n");
                     if ($prot_id =~ /^fig\|/) {
                         #  The original code also had a minimum length on roles, but ...
-                        my @roles = grep { /\S/ && length $_ <= 255 }
+                        my @roles = grep { /\S/ && length $_ <= 1024 }
                                     FIG::roles_of_function( $assigned_function );
                         foreach my $role (@roles)
                         {
