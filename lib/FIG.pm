@@ -8312,12 +8312,14 @@ sub genome_id_to_genome_object
     }
 
     my $gobj = GenomeTypeObject->new();
-
+print STDERR "Load from ", $self->organism_directory($genome_id), "\n";
     my @tax_id;
     if (open(my $tfh, "<", $self->organism_directory($genome_id) . "/TAXONOMY_ID"))
     {
 	my $tax_id = <$tfh>;
-	@tax_id = (taxonomy_id => $tax_id);
+	chomp $tax_id;
+	@tax_id = (taxonomy_id => $tax_id,
+		ncbi_taxonomy_id => $tax_id);
     }
 
     my $gc = 11;
