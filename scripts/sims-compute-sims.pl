@@ -12,6 +12,7 @@ my($opt, $usage) = describe_options("%c %o sims-dir",
 				    ["keep=i", "Keep this many matches", { default => 200 }],
 				    ["diamond-sensitivity=s", "Diamond sensitivity flag to use", { default => "sensitive" }],
 				    ["diamond-block-size=s", "Diamond block size", { default => 5 }],
+				    ["tmpdir|t=s", "Diamond temp dir"],
 				    ["help|h", "Show this help message"]);
 
 print($usage->text), exit 0 if $opt->help;
@@ -49,7 +50,9 @@ for my $seq_file (@seq_files)
 		  "--masking", 0,
 		  "--compress", 1,
 		  "--threads", $opt->threads,
+		  "--" . $opt->diamond_sensitivity,
 		  "-k", $opt->keep,
+		  ($opt->tmpdir ? ("--tmpdir", $opt->tmpdir) : ()),
 		  "--outfmt", qw(6 qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore qlen slen),
 		  "-d", "$sims_dir/nr",
 		  "-q", "$seq_dir/$seq_file",
