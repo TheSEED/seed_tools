@@ -256,9 +256,9 @@ sub sim_pegs {
 	    
 	    @pegs = grep {$ok_genome_id->{$fig->genome_of($_)}} grep {! $seen{$_}++} map {$_->[1]} @kp;
 
-	    open(O, ">","/homes/olson/tmp/kmer.out");
-	    print O Dumper($peg, \@kp, \@pegs);
-	    close(O);
+	    # open(O, ">","/homes/olson/tmp/kmer.out");
+	    # print O Dumper($peg, \@kp, \@pegs);
+	    # close(O);
 	}
     }
     elsif ($n_pgfams > 0 || $n_plfams > 0)
@@ -426,43 +426,49 @@ sub sort_pegs_by_similarity {
     # Get amino acid sequences
     my $sequences = &get_peg_sequences($fig, [$input_peg, @other_pegs]);
 
+    #print STDERR Dumper(SORT => $input_peg, $sequences->{$input_peg}, $fig);
+
     # Write the input peg sequence to a fasta file
     my $input_seq = {$input_peg => $sequences->{$input_peg}};
     my $input_seq_file = "$temp/input_seq.$$.tmp.fasta";
     &write_seqs_to_file($input_seq, $input_seq_file);
 
+    my @sorted = ($input_peg);
+
     # Write the other peg sequences to a fasta file
     delete $sequences->{$input_peg};
     my $other_seq_file = "$temp/other_seq.$$.tmp.fasta";
-    &write_seqs_to_file($sequences, $other_seq_file);
-
-    # Run formatdb
-    &formatdb_file($fig, $other_seq_file);
-
-    # BLAST input peg sequence against other peg sequences
-    # set high evalue cutoff so all hits get reported
-    my $cutoff = 10;
-    my $hits = &blast_files($fig, $input_seq_file, $other_seq_file, $cutoff);
-
-    my @sorted = ($input_peg);
-    #
-    # We might have multiple hits; just use the first.
-    #
-    my %seen;
-    foreach my $hit ( @$hits )
+    if (%$sequences)
     {
-	# BLAST output is already sorted by similarity
-	my($peg2) = (split(/\s+/, $hit))[1];
+	&write_seqs_to_file($sequences, $other_seq_file);
 	
- 	push @sorted, $peg2 unless $seen{$peg2}++;
-    }
-
-    for my $file ($input_seq_file, $other_seq_file)
-    {
-	for my $suffix ('', qw(.phr .psq .pin))
+	# Run formatdb
+	&formatdb_file($fig, $other_seq_file);
+	
+	# BLAST input peg sequence against other peg sequences
+	# set high evalue cutoff so all hits get reported
+	my $cutoff = 10;
+	my $hits = &blast_files($fig, $input_seq_file, $other_seq_file, $cutoff);
+	
+	#
+	# We might have multiple hits; just use the first.
+	#
+	my %seen;
+	foreach my $hit ( @$hits )
 	{
-	    my $path = "$file$suffix";
-	    unlink($path);
+	    # BLAST output is already sorted by similarity
+	    my($peg2) = (split(/\s+/, $hit))[1];
+	    
+	    push @sorted, $peg2 unless $seen{$peg2}++;
+	}
+	
+	for my $file ($input_seq_file, $other_seq_file)
+	{
+	    for my $suffix ('', qw(.phr .psq .pin))
+	    {
+		my $path = "$file$suffix";
+		unlink($path);
+	    }
 	}
     }
 
@@ -892,8 +898,10 @@ sub add_pattyfams {
 	for my $ent (@$entlist)
 	{
 	    my($fam, $fun) = @$ent;
+	    $fun //= "";
 	    my $istart = my $iend = "";
-	    if ($fun ne $fdata->{function})
+#	    print STDERR Dumper(FUN => $fun, $fdata);
+	    if (defined($fun) && defined($fdata->{function}) && ($fun ne $fdata->{function}))
 	    {
 		$istart = "<i>";
 		$iend = "</i>";
@@ -1463,7 +1471,7 @@ sub get_peg_sequences {
     my %sequences;
 
     # Iterate over each peg
-    my @lookup;
+    my %lookup;
     foreach my $peg ( @$pegs )
     {
 	my $seq = $cdd_trans->{$peg};
@@ -1474,11 +1482,25 @@ sub get_peg_sequences {
         }
         else
         {
-	    push(@lookup, $peg);
+	    $lookup{$peg} = 1;
 	}
     }
-    my $res = $fig->get_translation_bulk(\@lookup);
-    $sequences{$_} = $res->{$_} foreach keys %$res;
+
+    my $res = $fig->get_translation_bulk([keys %lookup]);
+    #print STDERR Dumper(GFS => \@lookup, $res, $fig);
+    for my $id (keys %$res)
+    {
+	$sequences{$id} = $res->{$id};
+	delete $lookup{$id};
+    }
+
+    #
+    # For FIGM, we need this.
+    #
+    for my $peg (keys %lookup)
+    {
+	$sequences{$peg} = $fig->get_translation($peg);
+    }
 
     return \%sequences;
 }
