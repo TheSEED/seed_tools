@@ -21,12 +21,10 @@ use FIG;
 use FileHandle;
 use strict;
 
-my $fig = new FIG;
-
 my $setdir = $FIG_Config::data . '/Sets/';
-$fig->verify_dir( $setdir );
+&FIG::verify_dir( $setdir );
 my $listdir = $FIG_Config::data . '/Sets/Genome_Sets/';
-$fig->verify_dir( $listdir );
+&FIG::verify_dir( $listdir );
 
 1;
 
