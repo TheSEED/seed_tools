@@ -36,6 +36,7 @@ use FF;
 use Fcntl qw/:flock/;  # import LOCK_* constants
 
 use POSIX;
+use Devel::Backtrace;
 use Scalar::Util qw(weaken);
 use Errno;
 use IPC::Open2;
@@ -225,6 +226,8 @@ sub new
     # if no FIG has yet been created. Otherwise
     # create a new FIG each time.
     #
+
+    print STDERR Devel::Backtrace->new;
 
     if ($FIG_Config::use_fig_singleton)
     {
@@ -25633,7 +25636,7 @@ package FIG;
     sub DESTROY
     {
 	my($self) = @_;
-	print "Destroy cache $self $$\n";
+	print STDERR "Destroy cache $self $$\n";
     }
 
     sub load_cache
