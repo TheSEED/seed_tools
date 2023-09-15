@@ -266,9 +266,6 @@ sub _new {
     $self->{gdata} = GenomeDataCache->new($self);
     $self->{sdata} = SubsystemDataCache->new($self);
 
-    weaken($self->{sdata});
-    weaken($self->{gdata});
-
     if ($FIG_Config::attrOld) {
         # Use the old attribute system. This is normally only done if we
         # need to reload.
@@ -556,7 +553,7 @@ The destructor releases the database handle.
     my($self) = @_;
     my($rdbH);
 
-    # print STDERR "FIG destroy\n";
+    print STDERR "FIG destroy $$\n";
     if ($rdbH = $self->db_handle) {
         $rdbH->DESTROY;
     }
@@ -20593,8 +20590,13 @@ sub get_subsystem :Scalar
     if ($force_load || !($sub = $cache->{$subsystem}))
     {
         $sub = new Subsystem($subsystem, $self);
-        $cache->{$subsystem} = $sub if $sub;
+	if ($sub)
+	{
+	    $cache->{$subsystem} = $sub;
+# 	    weaken $cache->{$subsystem};
+	}
     }
+    print DUMPER(SS => $self);
     return $sub;
 }
 
@@ -25520,6 +25522,7 @@ package FIG;
     use strict;
     use Data::Dumper;
     use Carp;
+    use Scalar::Util qw(weaken);
 
     sub new
     {
@@ -25529,6 +25532,7 @@ package FIG;
 	    fig => $fig,
 	    cache => undef,
 	};
+	weaken($self->{fig});
 	return bless $self, $class;
     }
 
@@ -25626,7 +25630,7 @@ package FIG;
     sub DESTROY
     {
 	my($self) = @_;
-#	print "Destroy cache $self\n";
+	print "Destroy cache $self $$\n";
     }
 
     sub load_cache
@@ -25665,7 +25669,8 @@ package FIG;
 {
     package SubsystemDataCache;
     use Carp;
-
+    use Data::Dumper;
+    use Scalar::Util qw(weaken);
     sub new
     {
 	my($class, $fig) = @_;
@@ -25674,6 +25679,7 @@ package FIG;
 	    fig => $fig,
 	    cache => undef,
 	};
+	weaken($self->{fig});
 	return bless $self, $class;
     }
 
