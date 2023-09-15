@@ -20604,7 +20604,6 @@ sub get_subsystem :Scalar
 # 	    weaken $cache->{$subsystem};
 	}
     }
-    print DUMPER(SS => $self);
     return $sub;
 }
 
