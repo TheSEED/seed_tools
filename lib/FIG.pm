@@ -36,6 +36,7 @@ use FF;
 use Fcntl qw/:flock/;  # import LOCK_* constants
 
 use POSIX;
+use Scalar::Util qw(weaken);
 use Errno;
 use IPC::Open2;
 use MIME::Base64;
@@ -264,6 +265,9 @@ sub _new {
     };
     $self->{gdata} = GenomeDataCache->new($self);
     $self->{sdata} = SubsystemDataCache->new($self);
+
+    weaken($self->{sdata});
+    weaken($self->{gdata});
 
     if ($FIG_Config::attrOld) {
         # Use the old attribute system. This is normally only done if we
@@ -552,6 +556,7 @@ The destructor releases the database handle.
     my($self) = @_;
     my($rdbH);
 
+    # print STDERR "FIG destroy\n";
     if ($rdbH = $self->db_handle) {
         $rdbH->DESTROY;
     }
@@ -20619,6 +20624,14 @@ sub clear_subsystem_cache {
     }
 }
 
+sub clear_caches
+{
+    my($self) = @_;
+    delete $self->{gdata};
+    delete $self->{sdata};
+    $self->clear_subsystem_cache();
+}
+
 =head3 subsystem_to_roles
 
     my @roles = $fig->subsystem_to_roles($subsysID);
@@ -25775,6 +25788,7 @@ package FIG;
 	    };
 	}
 	$self->{cache} = $sth->fetchall_hashref('subsystem');
+
 	$_->{curator} =~ s/^master:// for values %{$self->{cache}};
     }
 }
