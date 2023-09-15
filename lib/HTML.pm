@@ -865,7 +865,7 @@ sub fid_link {
         ( $text =~ s/^.*\.peg\.(\d+)$/$1/ ) || ( $text =~ s/^.*\.([^.]+\.\d+)$/$1/ ) if $local;
     }
 
-    if ( -f "$FIG_Config::fig/CGI/seedviewer.cgi" ) {
+    if ( $FIG_Config::seedviewer_enabled ) {
         # We're NMPDR. Compute the link to the seed viewer feature page.
         my $link = "seedviewer.cgi?page=Annotation&feature=$fid" . join( '&', @params );
 
