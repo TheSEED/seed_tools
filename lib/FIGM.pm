@@ -91,6 +91,13 @@ sub new {
     return $self;
 }
 
+
+sub DESTROY {
+    my($self) = @_;
+    print STDERR "FIGM destroy $self $$\n";
+    $self->SUPER::DESTROY if $self->can("SUPER::DESTROY");
+}
+
 sub is_complete
 {
     return 1;

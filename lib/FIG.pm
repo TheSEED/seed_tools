@@ -227,9 +227,9 @@ sub new
     # create a new FIG each time.
     #
 
-    print STDERR "\n\nNEW FIG\n";
-    print STDERR Devel::Backtrace->new;
-    print STDERR "****  $FIG_Config::use_fig_singleton\n";
+    # print STDERR "\n\nNEW FIG\n";
+    # print STDERR Devel::Backtrace->new;
+    # print STDERR "****  $FIG_Config::use_fig_singleton\n";
 
     if ($FIG_Config::use_fig_singleton)
     {
@@ -560,7 +560,7 @@ The destructor releases the database handle.
     my($self) = @_;
     my($rdbH);
 
-    print STDERR "FIG destroy $$\n";
+    print STDERR "FIG destroy $self $$\n";
     if ($rdbH = $self->db_handle) {
         $rdbH->DESTROY;
     }
@@ -19646,15 +19646,15 @@ sub is_exchangable_subsystem :Scalar {
     shift if UNIVERSAL::isa($_[0],__PACKAGE__);
     my $ssa = (@_ == 1) ? $_[0] : $_[1];
     $ssa =~ s/[ \/]/_/g;
-    if (open(TMP,"<$FIG_Config::data/Subsystems/$ssa/EXCHANGABLE"))
+    if (open(my $tmp,"<$FIG_Config::data/Subsystems/$ssa/EXCHANGABLE"))
     {
         my $line;
-        $line = <TMP>;
+        $line = <$tmp>;
+	close($tmp);
         if ($line && ($line =~ /^(\S+)/) && $1)
         {
             return 1;
         }
-        close(TMP);
     }
     else {
         return 1;

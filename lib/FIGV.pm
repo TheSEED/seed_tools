@@ -97,6 +97,12 @@ sub new {
     return bless $self, $class;
 }
 
+sub DESTROY {
+    my($self) = @_;
+    print STDERR "FIGV destroy $self $$\n";
+    $self->SUPER::DESTROY if $self->can("SUPER::DESTROY");
+}
+
 sub genome_info {
     my ($self) = @_;
     
