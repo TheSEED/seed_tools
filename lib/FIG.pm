@@ -263,6 +263,8 @@ sub _new {
     my $self = {
         _dbf  => $rdbH,
     };
+
+    print STDERR "FIG Create $self $$\n";
     $self->{gdata} = GenomeDataCache->new($self);
     $self->{sdata} = SubsystemDataCache->new($self);
 
@@ -19006,6 +19008,7 @@ sub build_tree_of_all {
     {
 	$res = [$self->build_tree_of_all_real($min_for_label, $complete)];
 	$cache->{$min_for_label, $complete} = $res;
+	weaken($cache->{$min_for_label, $complete});
     }
     return @$res;
 }
