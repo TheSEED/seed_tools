@@ -227,7 +227,9 @@ sub new
     # create a new FIG each time.
     #
 
+    print STDERR "\n\nNEW FIG\n";
     print STDERR Devel::Backtrace->new;
+    print STDERR "****  $FIG_Config::use_fig_singleton\n";
 
     if ($FIG_Config::use_fig_singleton)
     {
