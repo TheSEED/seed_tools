@@ -227,9 +227,9 @@ sub new
     # create a new FIG each time.
     #
 
-    print STDERR "\n\nNEW FIG\n";
-    print STDERR Devel::Backtrace->new;
-    print STDERR "****  $FIG_Config::use_fig_singleton\n";
+    #print STDERR "\n\nNEW FIG\n";
+    #print STDERR Devel::Backtrace->new;
+    #print STDERR "****  $FIG_Config::use_fig_singleton\n";
 
     if ($FIG_Config::use_fig_singleton)
     {
@@ -269,7 +269,7 @@ sub _new {
         _dbf  => $rdbH,
     };
 
-    print STDERR "FIG Create $self $$\n";
+    #print STDERR "FIG Create $self $$\n";
     $self->{gdata} = GenomeDataCache->new($self);
     $self->{sdata} = SubsystemDataCache->new($self);
 
@@ -560,7 +560,7 @@ The destructor releases the database handle.
     my($self) = @_;
     my($rdbH);
 
-    print STDERR "FIG destroy $$\n";
+    # print STDERR "FIG destroy $$\n";
     if ($rdbH = $self->db_handle) {
         $rdbH->DESTROY;
     }
@@ -19927,7 +19927,7 @@ sub rename_subsystem {
 
 For each subsystem in this SEED, perform a subsystem salvage operation for each old-genome / new-genome pair in $glist.
 This operation will determine if the old genome exists in the subsystem. If it does, the new genome is
-added to the subsystem, and we attempt to map the pegs from the cells in the old subsystem's row to the new
+added to the subsystem, and we attempt to map the pegs from the cells in the old subsystems row to the new
 subsystem. If all pegs map, we copy the variant code for the genome. If all cells did not map, we prepend
 a * to the variant code before copying.
 
@@ -21504,6 +21504,48 @@ sub subsystem_roles
     my $ret = {};
 
     if (my $relational_db_response = $rdbH->SQL($q))
+    {
+        foreach my $pair (@$relational_db_response)
+        {
+            my($subname, $role) = @$pair;
+            push(@{$ret->{$role}}, $subname);
+        }
+    }
+
+    return $ret;
+}
+
+=head3 usable_subsystem_roles
+
+Return a list of all roles present in locally-installed subsystems.
+The return is a hash keyed on role name with each value a list
+of subsystem names.
+
+Limit the search to subsystems that do not have a toplevel
+classification from the given list.
+
+=cut
+
+sub usable_subsystem_roles
+{
+    my($self, $exclude_classification) = @_;
+
+    if (!$exclude_classification || @$exclude_classification == 0)
+    {
+	return $self->subsystem_roles();
+    }
+
+    my $rdbH = $self->db_handle;
+
+
+    my $class = join(", ", map { "?" } @$exclude_classification);
+    my $q = qq(SELECT distinct i.subsystem, i.role 
+    FROM subsystem_index i JOIN subsystem_metadata m ON i.subsystem = m.subsystem
+    WHERE m.class_1 NOT IN ($class));
+
+    my $ret = {};
+
+    if (my $relational_db_response = $rdbH->SQL($q, 0, @$exclude_classification))
     {
         foreach my $pair (@$relational_db_response)
         {
@@ -25637,7 +25679,7 @@ package FIG;
     sub DESTROY
     {
 	my($self) = @_;
-	print STDERR "Destroy cache $self $$\n";
+	# print STDERR "Destroy cache $self $$\n";
     }
 
     sub load_cache
