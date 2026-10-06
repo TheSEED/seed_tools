@@ -57,6 +57,18 @@ sub pinned_regions {
     # Get list of pegs required by the description in $pin_desc
     my $pinned_pegs = &expand_peg_list($fig, $pin_desc);
     Trace("Pinned pegs are " . join(", ", @$pinned_pegs) . ".") if T(3);
+
+    #
+    # $fids_for_cds may be an explicit list, or any true non-reference value
+    # meaning "every pinned peg". The latter is what the compare-regions
+    # checkbox wants: a domain track only lets you compare architecture if
+    # every row has one, and the caller cannot name the pegs itself because
+    # they are not known until the list above has been expanded.
+    #
+    if ($fids_for_cds && ref($fids_for_cds) ne 'ARRAY')
+    {
+	$fids_for_cds = $pinned_pegs;
+    }
     # Filter out the pegs that don't exist.
     # Get regions around pinned pegs -- boundaries, features, etc.
     my $regions = &define_regions($fig, $map_sz, $pinned_pegs, $align);
@@ -82,10 +94,17 @@ sub pinned_regions {
     &add_subsystem_data($fig, $pin_desc, $feature_data, $extended);
 
     my $cdd_trans = {};
+    my $cdd_status = {};
     if ($cds && ref($fids_for_cds) eq 'ARRAY' && @$fids_for_cds)
     {
-	$cdd_trans = &add_cdd($regions, $fig, $cds, $fids_for_cds, $feature_data);
+	$cdd_trans = &add_cdd($regions, $fig, $cds, $fids_for_cds, $feature_data, $cdd_status);
     }
+    #
+    # Reported back through $pin_desc, which the caller owns, so the display
+    # can say that a backend job is still running rather than drawing an
+    # empty track as though the proteins had no domains.
+    #
+    $pin_desc->{cdd_pending} = $cdd_status->{pending} || 0;
 
     Trace("Coloring pegs.") if T(3);
     # Assign a set number to some PEGs through transitive closure based on similarity, from blast scores
@@ -97,6 +116,18 @@ sub pinned_regions {
     {
 	&color_pegs($fig, $pin_desc, $pinned_pegs, $regions, $feature_data, $fast_color, $sims_from, $cdd_trans);
     }
+
+    #
+    # Colour domains after the pegs, and by accession rather than by
+    # similarity. Blast cannot do this job: a domain is by construction
+    # similar to the protein it was cut from, so transitive closure puts
+    # every domain in its parent peg's set and the whole track comes out one
+    # colour -- set 1 at that, which RegionDisplay draws in the focus colour.
+    # Keying on the accession is cheaper and is the thing actually wanted:
+    # the same domain gets the same colour in every genome, and two different
+    # domains of one protein stay distinguishable.
+    #
+    &color_cdd_features($regions, $feature_data);
 
     # Filter out regions which have only a single PEG (the pinned one) colored.
     # $regions = &filter_regions_2($pin_desc, $regions, $feature_data);
@@ -1505,20 +1536,95 @@ sub get_peg_sequences {
     return \%sequences;
 }
 
+#
+# Assign set numbers to the CDD features, keyed on accession so that one
+# domain is one colour everywhere it appears. Numbering starts above the
+# highest set the peg colouring used, both to avoid colliding with it and to
+# stay clear of set 1, which RegionDisplay renders in the focus colour.
+#
+sub color_cdd_features
+{
+    my($regions, $feature_data) = @_;
+
+    my $max_set = 1;
+    for my $f (values %$feature_data)
+    {
+	my $s = $f->{set_number};
+	$max_set = $s if defined($s) && $s =~ /^\d+$/ && $s > $max_set;
+    }
+
+    my %set_of;
+    my $next = $max_set + 1;
+
+    for my $region (@$regions)
+    {
+	for my $fid (@{$region->{features} || []})
+	{
+	    my $f = $feature_data->{$fid} or next;
+	    my $type = $f->{type} || '';
+	    next unless $type =~ /^(domain_hit|site_annotation|structural_motif)$/;
+
+	    #
+	    # Fall back to the feature id when there is no accession, so an
+	    # unidentified domain gets its own colour rather than silently
+	    # sharing one with every other unidentified domain.
+	    #
+	    my $key = $f->{cdd_accession};
+	    $key = $fid unless defined($key) && $key ne '';
+
+	    $set_of{$key} = $next++ unless exists $set_of{$key};
+	    $f->{set_number} = $set_of{$key};
+	}
+    }
+}
+
 sub add_cdd
 {
-    my($regions, $fig, $cds, $fids_for_cds, $feature_data) = @_;
+    my($regions, $fig, $cds, $fids_for_cds, $feature_data, $status) = @_;
 
-    return unless ref($fids_for_cds) eq 'ARRAY';
+    $status = {} unless ref($status) eq 'HASH';
+
+    #
+    # The caller already checks this, but returning a bare undef would blow
+    # up the deref of the returned hash if it ever stopped doing so.
+    #
+    return {} unless ref($fids_for_cds) eq 'ARRAY';
     my %genomes = map { $fig->genome_of($_) => 1 } @$fids_for_cds;
     my %fids = map { $_ => 1 } @$fids_for_cds;
 
+    #
+    # Resolve every feature we are about to ask about in one call rather than
+    # one lookup per feature per region. Against the local rpsblast backend
+    # that is the difference between a single process invocation and one per
+    # protein; against NCBI it is one batch job instead of N serial ones.
+    #
+    my %wanted;
+    for my $row (@$regions)
+    {
+	next unless $genomes{$row->{genome_id}};
+	$wanted{$_} = 1 for grep { $fids{$_} } @{$row->{features}};
+    }
+    if (%wanted && $cds->can('prefetch'))
+    {
+	my $st = eval { $cds->prefetch([sort keys %wanted], { data_mode => 'rep' }) };
+	if ($@)
+	{
+	    warn "add_cdd: prefetch failed: $@";
+	}
+	elsif (ref($st) eq 'HASH' && ref($st->{pending}) eq 'ARRAY')
+	{
+	    $status->{pending} = scalar @{$st->{pending}};
+	}
+    }
+
     my @new;
     my $trans = {};
-    
+    my $region_idx = 0;
+
     for my $row (@$regions)
     {
 	push(@new, $row);
+	$region_idx++;
 	next unless $genomes{$row->{genome_id}};
 
 	#
@@ -1533,6 +1639,12 @@ sub add_cdd
 	    contig => $row->{contig},
 	    contig_length => $row->{contig_length},
 	    pinned_peg_strand => $row->{pinned_peg_strand},
+	    #
+	    # RegionDisplay reads pinned_peg for the line's select_id and for
+	    # the region-selection table; without it the CDD line gets undef
+	    # in both.
+	    #
+	    pinned_peg => $row->{pinned_peg},
 	    org_name => "$row->{org_name} CDD",
 	    genome_id => $row->{genome_id},
 	    features => $feats,
@@ -1542,7 +1654,18 @@ sub add_cdd
 	    my @x = $cds->create_cdd_features($fid, { data_mode => 'rep', cached_only => 0 });
 	    for my $f (@x)
 	    {
-		my($cfid, $type, $canno, $cloc, $ctrans) = @$f;
+		my($cfid, $type, $canno, $cloc, $ctrans, $cacc) = @$f;
+
+		#
+		# One feature can fall inside two overlapping regions, and
+		# create_cdd_features derives its id from the feature alone.
+		# Without a per-region suffix the second region's offsets
+		# would overwrite the first's in %$feature_data while both
+		# rows still referenced the one shared id, drawing one of
+		# them in the wrong frame.
+		#
+		$cfid .= ".r$region_idx";
+
 		push(@$feats, $cfid);
 		$trans->{$cfid} = $ctrans;
 
@@ -1562,6 +1685,7 @@ sub add_cdd
 		$feature_data->{$cfid} = {
 		    'parent'     => $fid,
 		    'fid'        => $cfid,
+		    'cdd_accession' => $cacc,
 		    'location'   => $loc,
 		    'type'       => $type,
 		    'contig'     => $contig,
