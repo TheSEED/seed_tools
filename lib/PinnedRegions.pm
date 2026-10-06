@@ -1294,7 +1294,13 @@ sub blast_hits {
 
             # Build up a hash of peg sequences which are not 'done_with'
             my %region_seqs;
-            foreach my $peg ( grep {$feature_data->{$_}{'type'} eq 'peg'} @$fids )
+            # Domains go into the blast database above, so they have to be
+            # eligible as queries too -- matching the filter used there.
+            # Restricted to pegs, a domain could only ever be coloured by
+            # association with a peg that happened to hit it, so the same
+            # domain in two genomes was not reliably given the same colour.
+            foreach my $peg ( grep {$feature_data->{$_}{'type'} &&
+                                    $feature_data->{$_}{'type'} =~ /peg|domain/} @$fids )
             {
                 if ( $sequences->{$peg} and not $done_with{$peg} )
                 {
@@ -1509,16 +1515,40 @@ sub add_cdd
 {
     my($regions, $fig, $cds, $fids_for_cds, $feature_data) = @_;
 
-    return unless ref($fids_for_cds) eq 'ARRAY';
+    #
+    # The caller already checks this, but returning a bare undef would blow
+    # up the deref of the returned hash if it ever stopped doing so.
+    #
+    return {} unless ref($fids_for_cds) eq 'ARRAY';
     my %genomes = map { $fig->genome_of($_) => 1 } @$fids_for_cds;
     my %fids = map { $_ => 1 } @$fids_for_cds;
 
+    #
+    # Resolve every feature we are about to ask about in one call rather than
+    # one lookup per feature per region. Against the local rpsblast backend
+    # that is the difference between a single process invocation and one per
+    # protein; against NCBI it is one batch job instead of N serial ones.
+    #
+    my %wanted;
+    for my $row (@$regions)
+    {
+	next unless $genomes{$row->{genome_id}};
+	$wanted{$_} = 1 for grep { $fids{$_} } @{$row->{features}};
+    }
+    if (%wanted && $cds->can('prefetch'))
+    {
+	eval { $cds->prefetch([sort keys %wanted], { data_mode => 'rep' }) };
+	warn "add_cdd: prefetch failed: $@" if $@;
+    }
+
     my @new;
     my $trans = {};
-    
+    my $region_idx = 0;
+
     for my $row (@$regions)
     {
 	push(@new, $row);
+	$region_idx++;
 	next unless $genomes{$row->{genome_id}};
 
 	#
@@ -1533,6 +1563,12 @@ sub add_cdd
 	    contig => $row->{contig},
 	    contig_length => $row->{contig_length},
 	    pinned_peg_strand => $row->{pinned_peg_strand},
+	    #
+	    # RegionDisplay reads pinned_peg for the line's select_id and for
+	    # the region-selection table; without it the CDD line gets undef
+	    # in both.
+	    #
+	    pinned_peg => $row->{pinned_peg},
 	    org_name => "$row->{org_name} CDD",
 	    genome_id => $row->{genome_id},
 	    features => $feats,
@@ -1543,6 +1579,17 @@ sub add_cdd
 	    for my $f (@x)
 	    {
 		my($cfid, $type, $canno, $cloc, $ctrans) = @$f;
+
+		#
+		# One feature can fall inside two overlapping regions, and
+		# create_cdd_features derives its id from the feature alone.
+		# Without a per-region suffix the second region's offsets
+		# would overwrite the first's in %$feature_data while both
+		# rows still referenced the one shared id, drawing one of
+		# them in the wrong frame.
+		#
+		$cfid .= ".r$region_idx";
+
 		push(@$feats, $cfid);
 		$trans->{$cfid} = $ctrans;
 
