@@ -267,7 +267,12 @@ sub create_cdd_features
                 }
                 my $type = $what;
                 $type =~ s/s$//;
-                push(@out, [$sfid, $type, $anno, $floc, $trans]);
+                #
+                # The accession rides along as a sixth element so callers can
+                # group identical domains without having to pick the id apart.
+                #
+                push(@out, [$sfid, $type, $anno, $floc, $trans,
+                            ($info ? $info->[0] : undef)]);
                 $subid++;
             }
         }
@@ -474,6 +479,23 @@ sub cache_dir
     my $d = eval { $self->fig->organism_directory($genome) };
     return undef unless defined($d) && $d ne '' && -d $d;
     return "$d/CDD";
+}
+
+=head3 is_cached
+
+    my $bool = $cdd->is_cached($genome, $md5);
+
+True when this protein already has a cache entry, including the negative
+entry written for a protein that genuinely has no domains. Lets a bulk
+caller skip work without going through a lookup.
+
+=cut
+
+sub is_cached
+{
+    my($self, $genome, $md5) = @_;
+    my $f = $self->_cache_file($genome, $md5);
+    return (defined($f) && -f $f) ? 1 : 0;
 }
 
 sub _cache_file

@@ -57,6 +57,18 @@ sub pinned_regions {
     # Get list of pegs required by the description in $pin_desc
     my $pinned_pegs = &expand_peg_list($fig, $pin_desc);
     Trace("Pinned pegs are " . join(", ", @$pinned_pegs) . ".") if T(3);
+
+    #
+    # $fids_for_cds may be an explicit list, or any true non-reference value
+    # meaning "every pinned peg". The latter is what the compare-regions
+    # checkbox wants: a domain track only lets you compare architecture if
+    # every row has one, and the caller cannot name the pegs itself because
+    # they are not known until the list above has been expanded.
+    #
+    if ($fids_for_cds && ref($fids_for_cds) ne 'ARRAY')
+    {
+	$fids_for_cds = $pinned_pegs;
+    }
     # Filter out the pegs that don't exist.
     # Get regions around pinned pegs -- boundaries, features, etc.
     my $regions = &define_regions($fig, $map_sz, $pinned_pegs, $align);
@@ -82,10 +94,17 @@ sub pinned_regions {
     &add_subsystem_data($fig, $pin_desc, $feature_data, $extended);
 
     my $cdd_trans = {};
+    my $cdd_status = {};
     if ($cds && ref($fids_for_cds) eq 'ARRAY' && @$fids_for_cds)
     {
-	$cdd_trans = &add_cdd($regions, $fig, $cds, $fids_for_cds, $feature_data);
+	$cdd_trans = &add_cdd($regions, $fig, $cds, $fids_for_cds, $feature_data, $cdd_status);
     }
+    #
+    # Reported back through $pin_desc, which the caller owns, so the display
+    # can say that a backend job is still running rather than drawing an
+    # empty track as though the proteins had no domains.
+    #
+    $pin_desc->{cdd_pending} = $cdd_status->{pending} || 0;
 
     Trace("Coloring pegs.") if T(3);
     # Assign a set number to some PEGs through transitive closure based on similarity, from blast scores
@@ -97,6 +116,18 @@ sub pinned_regions {
     {
 	&color_pegs($fig, $pin_desc, $pinned_pegs, $regions, $feature_data, $fast_color, $sims_from, $cdd_trans);
     }
+
+    #
+    # Colour domains after the pegs, and by accession rather than by
+    # similarity. Blast cannot do this job: a domain is by construction
+    # similar to the protein it was cut from, so transitive closure puts
+    # every domain in its parent peg's set and the whole track comes out one
+    # colour -- set 1 at that, which RegionDisplay draws in the focus colour.
+    # Keying on the accession is cheaper and is the thing actually wanted:
+    # the same domain gets the same colour in every genome, and two different
+    # domains of one protein stay distinguishable.
+    #
+    &color_cdd_features($regions, $feature_data);
 
     # Filter out regions which have only a single PEG (the pinned one) colored.
     # $regions = &filter_regions_2($pin_desc, $regions, $feature_data);
@@ -1294,13 +1325,7 @@ sub blast_hits {
 
             # Build up a hash of peg sequences which are not 'done_with'
             my %region_seqs;
-            # Domains go into the blast database above, so they have to be
-            # eligible as queries too -- matching the filter used there.
-            # Restricted to pegs, a domain could only ever be coloured by
-            # association with a peg that happened to hit it, so the same
-            # domain in two genomes was not reliably given the same colour.
-            foreach my $peg ( grep {$feature_data->{$_}{'type'} &&
-                                    $feature_data->{$_}{'type'} =~ /peg|domain/} @$fids )
+            foreach my $peg ( grep {$feature_data->{$_}{'type'} eq 'peg'} @$fids )
             {
                 if ( $sequences->{$peg} and not $done_with{$peg} )
                 {
@@ -1511,9 +1536,53 @@ sub get_peg_sequences {
     return \%sequences;
 }
 
+#
+# Assign set numbers to the CDD features, keyed on accession so that one
+# domain is one colour everywhere it appears. Numbering starts above the
+# highest set the peg colouring used, both to avoid colliding with it and to
+# stay clear of set 1, which RegionDisplay renders in the focus colour.
+#
+sub color_cdd_features
+{
+    my($regions, $feature_data) = @_;
+
+    my $max_set = 1;
+    for my $f (values %$feature_data)
+    {
+	my $s = $f->{set_number};
+	$max_set = $s if defined($s) && $s =~ /^\d+$/ && $s > $max_set;
+    }
+
+    my %set_of;
+    my $next = $max_set + 1;
+
+    for my $region (@$regions)
+    {
+	for my $fid (@{$region->{features} || []})
+	{
+	    my $f = $feature_data->{$fid} or next;
+	    my $type = $f->{type} || '';
+	    next unless $type =~ /^(domain_hit|site_annotation|structural_motif)$/;
+
+	    #
+	    # Fall back to the feature id when there is no accession, so an
+	    # unidentified domain gets its own colour rather than silently
+	    # sharing one with every other unidentified domain.
+	    #
+	    my $key = $f->{cdd_accession};
+	    $key = $fid unless defined($key) && $key ne '';
+
+	    $set_of{$key} = $next++ unless exists $set_of{$key};
+	    $f->{set_number} = $set_of{$key};
+	}
+    }
+}
+
 sub add_cdd
 {
-    my($regions, $fig, $cds, $fids_for_cds, $feature_data) = @_;
+    my($regions, $fig, $cds, $fids_for_cds, $feature_data, $status) = @_;
+
+    $status = {} unless ref($status) eq 'HASH';
 
     #
     # The caller already checks this, but returning a bare undef would blow
@@ -1537,8 +1606,15 @@ sub add_cdd
     }
     if (%wanted && $cds->can('prefetch'))
     {
-	eval { $cds->prefetch([sort keys %wanted], { data_mode => 'rep' }) };
-	warn "add_cdd: prefetch failed: $@" if $@;
+	my $st = eval { $cds->prefetch([sort keys %wanted], { data_mode => 'rep' }) };
+	if ($@)
+	{
+	    warn "add_cdd: prefetch failed: $@";
+	}
+	elsif (ref($st) eq 'HASH' && ref($st->{pending}) eq 'ARRAY')
+	{
+	    $status->{pending} = scalar @{$st->{pending}};
+	}
     }
 
     my @new;
@@ -1578,7 +1654,7 @@ sub add_cdd
 	    my @x = $cds->create_cdd_features($fid, { data_mode => 'rep', cached_only => 0 });
 	    for my $f (@x)
 	    {
-		my($cfid, $type, $canno, $cloc, $ctrans) = @$f;
+		my($cfid, $type, $canno, $cloc, $ctrans, $cacc) = @$f;
 
 		#
 		# One feature can fall inside two overlapping regions, and
@@ -1609,6 +1685,7 @@ sub add_cdd
 		$feature_data->{$cfid} = {
 		    'parent'     => $fid,
 		    'fid'        => $cfid,
+		    'cdd_accession' => $cacc,
 		    'location'   => $loc,
 		    'type'       => $type,
 		    'contig'     => $contig,
