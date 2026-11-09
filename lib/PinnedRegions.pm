@@ -631,7 +631,7 @@ sub define_regions {
 		}
 		
 	    }
-	    print STDERR "$peg AO=$align_offset  AP=$align_point C=$center M=$region_mid\n";
+	    #print STDERR "$peg AO=$align_offset  AP=$align_point C=$center M=$region_mid\n";
 	    
             my $region_beg = $region_mid - $half_map_sz;
             my $region_end = $region_mid + $half_map_sz;
@@ -1461,7 +1461,7 @@ sub write_seqs_to_file {
     open(FASTA, ">$fasta_file") or die "could not create FASTA file '$fasta_file': $!";
     foreach my $peg ( keys %$seq )
     {
-        print FASTA ">$peg\n$seq->{$peg}\n";
+        print FASTA ">$peg\n" . ($seq->{$peg} // '') . "\n";
     }
     close(FASTA) or die "could not close file FASTA file '$fasta_file': $!";
 }

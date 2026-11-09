@@ -32,6 +32,7 @@ use DB_File;
 use File::Basename;
 use FileHandle;
 use FileLocking qw(lock_file unlock_file);
+use File::Touch;
 use SeedUtils ();
 
 sub new {
@@ -60,6 +61,7 @@ sub new {
 	if (!-d $org_dir) {
 	    confess "ERROR: Organism directory $org_dir does not exist";
 	}
+	touch("$org_dir/LAST_ACCESS");
     }
     else {
 	warn "New FIGV using system organism directories in $FIG_Config::organsims" if $ENV{FIG_VERBOSE};
@@ -99,7 +101,7 @@ sub new {
 
 sub DESTROY {
     my($self) = @_;
-    print STDERR "FIGV destroy $self $$\n";
+    #print STDERR "FIGV destroy $self $$\n";
     $self->SUPER::DESTROY if $self->can("SUPER::DESTROY");
 }
 

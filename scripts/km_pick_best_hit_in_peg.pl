@@ -1,5 +1,6 @@
 use strict;
 use Data::Dumper;
+use File::Slurp;
 
 use Getopt::Long;
 my $no_scores = 0;
@@ -35,7 +36,7 @@ while ($last && ($last =~ /^(\S+)/))
 	
 	$funcsW{$func} += $weighted_score;
 	$funcs{$func} += $hits;
-	# print Dumper($func, \%funcsW, \%funcs);
+	# print STDERR Dumper($func, \%funcsW, \%funcs);
 	$z_sc       = ($hit_zsc > $z_sc) ? $hit_zsc : $z_sc;
 	$last = <STDIN>;
     }

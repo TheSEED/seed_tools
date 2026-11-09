@@ -30,6 +30,7 @@ use Data::Dumper;
 use vars qw($AUTOLOAD);
 use DB_File;
 use FileHandle;
+use File::Touch;
 
 our $persistent_figv_cache = {};
 
@@ -72,6 +73,7 @@ sub new {
 	{
 	    $figv = eval { new FIGV($dir, undef, $fig); };
 	}
+
 	
 	if ($@)
 	{
@@ -86,6 +88,7 @@ sub new {
 	    $self->{_figv_cache}->{$figv->genome_id()} = $figv;
 	    $self->{_peer_org_dir}->{$figv->genome_id()} = $dir;
 	}
+	#touch("$dir/LAST_ACCESS");
     }
 
     return $self;
@@ -94,7 +97,7 @@ sub new {
 
 sub DESTROY {
     my($self) = @_;
-    print STDERR "FIGM destroy $self $$\n";
+    #print STDERR "FIGM destroy $self $$\n";
     $self->SUPER::DESTROY if $self->can("SUPER::DESTROY");
 }
 

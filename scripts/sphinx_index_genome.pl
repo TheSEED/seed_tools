@@ -216,7 +216,7 @@ sub index_dlits
     my @dlits = $fig->get_attributes(undef, 'evidence_code', 'dlit%');
 
     my $ua = LWP::UserAgent->new;
-    my $url_fmt = 'http://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=%s&retmode=text&rettype=abstract';
+    my $url_fmt = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=%s&retmode=text&rettype=abstract';
     # @fields = qw(title abstract protein fid);
     my $cache = "$FIG_Config::var/pm_abstract_cache";
     -d $cache || mkdir $cache;

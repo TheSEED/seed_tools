@@ -269,7 +269,7 @@ sub _new {
         _dbf  => $rdbH,
     };
 
-    print STDERR "FIG Create $self $$\n";
+    #print STDERR "FIG Create $self $$\n";
     $self->{gdata} = GenomeDataCache->new($self);
     $self->{sdata} = SubsystemDataCache->new($self);
 
@@ -463,8 +463,10 @@ the database methods.
 
 sub db_handle {
     my($self) = @_;
-    $self->{_dbf}->{_dbh}->ping();
-    return $self->{_dbf};
+    my $dbf = $self->{_dbf};
+    return undef unless $dbf && $dbf->{_dbh};
+    $dbf->{_dbh}->ping();
+    return $dbf;
 }
 
 =head3 seed_global_dbh
@@ -560,7 +562,7 @@ The destructor releases the database handle.
     my($self) = @_;
     my($rdbH);
 
-    print STDERR "FIG destroy $self $$\n";
+    #print STDERR "FIG destroy $self $$\n";
     if ($rdbH = $self->db_handle) {
         $rdbH->DESTROY;
     }
@@ -625,7 +627,7 @@ sub is_locked_fid {
 
     if (! $self->table_exists('fid_locks')) { return 0 }
     my $rdbH = $self->db_handle;
-    my $relational_db_response = $rdbH->SQL("SELECT fid FROM fid_locks WHERE fid = \'$fid\' ");
+    my $relational_db_response = $rdbH->SQL("SELECT fid FROM fid_locks WHERE fid = ? ", undef, $fid);
     return (@$relational_db_response > 0) ? 1 : 0;
 }
 
@@ -641,17 +643,17 @@ sub lock_fid {
     my($self,$user,$fid) = @_;
 
     if (! $self->table_exists('fid_locks'))       { return 0 }
-    if ((! $user) || ($fid !~ /^fig\|\d+\.\d+/))  { return 0 }
+    if ((! $user) || ($fid !~ /^fig\|\d+\.\d+\.[^.]+\.\d+$/))  { return 0 }
     if ($self->is_locked_fid($fid))               { return 1 }
 
     my $func = $self->function_of($fid);
     $self->add_annotation($fid,$user,"locked assignments to '$func'");
 
     my $rdbH = $self->db_handle;
-    my $relational_db_response = $rdbH->SQL("SELECT fid FROM fid_locks WHERE fid = \'$fid\' ");
+    my $relational_db_response = $rdbH->SQL("SELECT fid FROM fid_locks WHERE fid = ? ", undef, $fid);
     if (! (@$relational_db_response > 0))
     {
-        $rdbH->SQL("INSERT INTO fid_locks ( fid ) VALUES ( '$fid' )");
+        $rdbH->SQL("INSERT INTO fid_locks ( fid ) VALUES ( ? )", undef, $fid);
 	if ($fid =~ /^fig\|(\d+\.\d+)\.([^\.]+)/)
 	{
 	    my $genome = $1;
@@ -677,13 +679,13 @@ sub unlock_fid {
     my($self,$user,$fid) = @_;
 
     if (! $self->table_exists('fid_locks'))       { return 0 }
-    if ((! $user) || ($fid !~ /^fig\|\d+\.\d+/))  { return 0 }
+    if ((! $user) || ($fid !~ /^fig\|\d+\.\d+\.[^.]+\.\d+$/))  { return 0 }
     if (! $self->is_locked_fid($fid))             { return 1 }
 
     $self->add_annotation($fid,$user,"unlocked assignments");
     my $rdbH = $self->db_handle;
-    my $relational_db_response = $rdbH->SQL("SELECT fid FROM fid_locks WHERE fid = '$fid' ");
-    $rdbH->SQL("DELETE FROM fid_locks WHERE ( fid = '$fid' )");
+    my $relational_db_response = $rdbH->SQL("SELECT fid FROM fid_locks WHERE fid = ? ", undef, $fid);
+    $rdbH->SQL("DELETE FROM fid_locks WHERE ( fid = ? )", undef, $fid);
     if ($fid =~ /^fig\|(\d+\.\d+)\.([^\.]+)/)
     {
 	my $genome = $1;
@@ -709,7 +711,7 @@ sub is_propagation_locked_fid {
 
     if (! $self->table_exists('fid_propagation_locks')) { return 0 }
     my $rdbH = $self->db_handle;
-    my $relational_db_response = $rdbH->SQL("SELECT fid FROM fid_propagation_locks WHERE fid = \'$fid\' ");
+    my $relational_db_response = $rdbH->SQL("SELECT fid FROM fid_propagation_locks WHERE fid = ? ", undef, $fid);
     return (@$relational_db_response > 0) ? 1 : 0;
 }
 
@@ -725,17 +727,17 @@ sub propagation_lock_fid {
     my($self,$user,$fid) = @_;
 
     if (! $self->table_exists('fid_propagation_locks'))       { return 0 }
-    if ((! $user) || ($fid !~ /^fig\|\d+\.\d+/))  { return 0 }
+    if ((! $user) || ($fid !~ /^fig\|\d+\.\d+\.[^.]+\.\d+$/))  { return 0 }
     if ($self->is_propagation_locked_fid($fid))               { return 1 }
 
     my $func = $self->function_of($fid);
     $self->add_annotation($fid,$user,"propagation_locked assignments to '$func'");
 
     my $rdbH = $self->db_handle;
-    my $relational_db_response = $rdbH->SQL("SELECT fid FROM fid_propagation_locks WHERE fid = \'$fid\' ");
+    my $relational_db_response = $rdbH->SQL("SELECT fid FROM fid_propagation_locks WHERE fid = ? ", undef, $fid);
     if (! (@$relational_db_response > 0))
     {
-        $rdbH->SQL("INSERT INTO fid_propagation_locks ( fid ) VALUES ( '$fid' )");
+        $rdbH->SQL("INSERT INTO fid_propagation_locks ( fid ) VALUES ( ? )", undef, $fid);
 	if ($fid =~ /^fig\|(\d+\.\d+)\.([^\.]+)/)
 	{
 	    my $genome = $1;
@@ -761,13 +763,13 @@ sub propagation_unlock_fid {
     my($self,$user,$fid) = @_;
 
     if (! $self->table_exists('fid_propagation_locks'))       { return 0 }
-    if ((! $user) || ($fid !~ /^fig\|\d+\.\d+/))  { return 0 }
+    if ((! $user) || ($fid !~ /^fig\|\d+\.\d+\.[^.]+\.\d+$/))  { return 0 }
     if (! $self->is_propagation_locked_fid($fid))             { return 1 }
 
     $self->add_annotation($fid,$user,"propagation_unlocked assignments");
     my $rdbH = $self->db_handle;
-    my $relational_db_response = $rdbH->SQL("SELECT fid FROM fid_propagation_locks WHERE fid = '$fid' ");
-    $rdbH->SQL("DELETE FROM fid_propagation_locks WHERE ( fid = '$fid' )");
+    my $relational_db_response = $rdbH->SQL("SELECT fid FROM fid_propagation_locks WHERE fid = ? ", undef, $fid);
+    $rdbH->SQL("DELETE FROM fid_propagation_locks WHERE ( fid = ? )", undef, $fid);
     if ($fid =~ /^fig\|(\d+\.\d+)\.([^\.]+)/)
     {
 	my $genome = $1;
@@ -3354,7 +3356,7 @@ sub get_organism_info_from_ncbi{
     my $overview = {};
     
     #query url
-    my $url="http://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=taxonomy&report=xml&id=". $tax_id;
+    my $url="https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=taxonomy&report=xml&id=". $tax_id;
     my $content = get($url);
     
     use XML::Simple;
@@ -3895,7 +3897,8 @@ sub run_gathering_output {
     if ($pid == 0)
     {
         exec { $cmd } $cmd, @args;
-        die "could not execute $cmd @args: $!\n";
+        print STDERR "could not execute $cmd @args: $!\n";
+        POSIX::_exit(1);
     }
 
     if (wantarray)
@@ -4899,7 +4902,7 @@ sub genome_szdna {
 
     if ($genome) {
         if (($relational_db_response =
-            $rdbH->SQL("SELECT szdna FROM genome WHERE ( genome = \'$genome\' )"))
+            $rdbH->SQL("SELECT szdna FROM genome WHERE ( genome = ? )", 0, $genome))
             && (@$relational_db_response == 1)) {
 
             return $relational_db_response->[0]->[0];
@@ -4990,7 +4993,7 @@ sub genome_md5sum :Scalar {
 
     if ($genome) {
         if (($relational_db_response =
-             $rdbH->SQL("SELECT md5sum FROM genome_md5sum WHERE ( genome = \'$genome\' )"))
+             $rdbH->SQL("SELECT md5sum FROM genome_md5sum WHERE ( genome = ? )", 0, $genome))
             && (@$relational_db_response == 1)) {
             return $relational_db_response->[0]->[0];
         }
@@ -5143,7 +5146,7 @@ sub md5_of_peg {
     #  Try to find it in the DBMS
 
     my $rdbH = $self->db_handle;
-    my $dbms_response = $rdbH->SQL( "SELECT md5 FROM protein_sequence_MD5 WHERE id = '$peg'" );
+    my $dbms_response = $rdbH->SQL( "SELECT md5 FROM protein_sequence_MD5 WHERE id = ?", undef, $peg );
 
     return $dbms_response->[0]->[0] if $dbms_response && @$dbms_response;
 
@@ -5155,7 +5158,7 @@ sub md5_of_peg {
     #  Got a sequence, find the md5, save it in the DBMS, and return it
 
     my $md5 = Digest::MD5::md5_hex( uc $sequence );
-    $rdbH->SQL( "INSERT INTO protein_sequence_MD5 ( id, md5 ) VALUES ( '$peg', '$md5' )" );
+    $rdbH->SQL( "INSERT INTO protein_sequence_MD5 ( id, md5 ) VALUES ( ?, ? )", undef, $peg, $md5 );
 
     return $md5;
 }
@@ -8106,18 +8109,22 @@ sub all_features_detailed_fast {
   my($self,$genome, $min, $max, $contig) = @_;
 
   my $minmax = "";
-  if (defined($min) && defined($max)) {
+  my @bind_values = ($genome);
+
+  if (defined($min) && defined($max) && $min =~ /^\d+$/ && $max =~ /^\d+$/) {
     $minmax = "AND ((minloc <= $min AND maxloc >= $min) OR (minloc <= $max AND maxloc >= $max) OR (minloc >= $min AND maxloc <= $max)) ";
   }
 
   my $contig_line = "";
   if (defined($contig)) {
-    $contig_line = "AND features.contig = '" . $contig . "' ";
+    $contig_line = "AND features.contig = ? ";
+    push @bind_values, $contig;
   }
 
   my $rdbH = $self->db_handle;
 
-  my $relational_db_response = $rdbH->SQL("SELECT DISTINCT id, location, aliases, type, minloc, maxloc, assigned_function, made_by, quality FROM (SELECT id, location, aliases, type, minloc, maxloc FROM features LEFT OUTER JOIN deleted_fids ON features.id = deleted_fids.fid WHERE features.genome = '" . $genome . "' " . $contig_line . $minmax . "AND fid IS NULL) AS t1 LEFT OUTER JOIN assigned_functions on t1.id = assigned_functions.prot");
+  my $sql = "SELECT DISTINCT id, location, aliases, type, minloc, maxloc, assigned_function, made_by, quality FROM (SELECT id, location, aliases, type, minloc, maxloc FROM features LEFT OUTER JOIN deleted_fids ON features.id = deleted_fids.fid WHERE features.genome = ? " . $contig_line . $minmax . "AND fid IS NULL) AS t1 LEFT OUTER JOIN assigned_functions on t1.id = assigned_functions.prot";
+  my $relational_db_response = $rdbH->SQL($sql, 0, @bind_values);
 
   return $relational_db_response || ();
 
@@ -8131,7 +8138,7 @@ sub contig_lengths {
   my $contig_lengths;
 
   my $rdbH = $self->db_handle;
-  my $relational_db_response = $rdbH->SQL("SELECT contig, len FROM contig_lengths WHERE genome='$genome'");
+  my $relational_db_response = $rdbH->SQL("SELECT contig, len FROM contig_lengths WHERE genome=?", 0, $genome);
 
   foreach my $contig (@$relational_db_response) {
     $contig_lengths->{$contig->[0]} = $contig->[1];
@@ -8270,26 +8277,29 @@ sub essentiality_data {
 
   my $rdbH = $self->db_handle;
 
+  my @bind_values = ($genome, $experiment);
   my $defined_val = "";
   if (defined($value)) {
     if (ref($value) eq "ARRAY") {
-      my $vals;
+      my @placeholders;
       foreach my $val (@$value) {
-	push(@$vals, "val='" . $val . "'");
+	push @placeholders, "val=?";
+	push @bind_values, $val;
       }
-      $defined_val = " AND (" . join(" OR ", @$vals) . ")";
+      $defined_val = " AND (" . join(" OR ", @placeholders) . ")";
     } else {
-      $defined_val = " AND val='" . $value . "'";
+      $defined_val = " AND val=?";
+      push @bind_values, $value;
     }
   }
 
-  my $statement = "SELECT prot, aliases, assigned_function, val, minloc FROM (SELECT CONCAT('fig|', genome, '.', ftype, '.', id) AS pid, val FROM attribute WHERE genome='" . $genome . "' AND tag='" . $experiment . "'" . $defined_val . ") AS t1 LEFT OUTER JOIN assigned_functions on t1.pid = assigned_functions.prot LEFT OUTER JOIN features ON t1.pid = features.id ORDER BY minloc";
+  my $statement = "SELECT prot, aliases, assigned_function, val, minloc FROM (SELECT CONCAT('fig|', genome, '.', ftype, '.', id) AS pid, val FROM attribute WHERE genome=? AND tag=?" . $defined_val . ") AS t1 LEFT OUTER JOIN assigned_functions on t1.pid = assigned_functions.prot LEFT OUTER JOIN features ON t1.pid = features.id ORDER BY minloc";
 
-  my $relational_db_response = $rdbH->SQL($statement);
+  my $relational_db_response = $rdbH->SQL($statement, 0, @bind_values);
 
   my $return;
   foreach my $row (@$relational_db_response) {
-      my $retval = $rdbH->SQL("SELECT DISTINCT subsystem from subsystem_index WHERE protein='" . $row->[0] . "'");
+      my $retval = $rdbH->SQL("SELECT DISTINCT subsystem from subsystem_index WHERE protein=?", 0, $row->[0]);
       my $subsystems;
       foreach my $subsystem (@$retval) {
 	push(@$subsystems, $subsystem->[0]);
@@ -9206,7 +9216,7 @@ sub is_real_feature {
     if ($self->is_deleted_fid($fid)) { return 0 }
 
     my $rdbH = $self->db_handle;
-    return (($relational_db_response = $rdbH->SQL("SELECT id FROM features WHERE ( id = \'$fid\' )")) &&
+    return (($relational_db_response = $rdbH->SQL("SELECT id FROM features WHERE ( id = ? )", undef, $fid)) &&
             (@$relational_db_response == 1)) ? 1 : 0;
 }
 
@@ -18487,7 +18497,7 @@ sub all_contigs {
     $rdbH = $self->db_handle;
     if (defined($genome))
     {
-        if ($relational_db_response = $rdbH->SQL("SELECT DISTINCT contig FROM contig_lengths WHERE ( genome = \'$genome\' )"))
+        if ($relational_db_response = $rdbH->SQL("SELECT DISTINCT contig FROM contig_lengths WHERE ( genome = ? )", 0, $genome))
         {
             return map { $_->[0] } @$relational_db_response;
         }
@@ -20435,7 +20445,8 @@ sub subsystems_for_genome {
         local $dbh->{RaiseError} = 1;
         local $dbh->{PrintError} = 0;
 
-        my $sql="SELECT DISTINCT subsystem from subsystem_index WHERE (protein like 'fig\|$genome.peg.%'";
+        my $like_pat = "fig|${genome}.peg.%";
+        my $sql = "SELECT DISTINCT subsystem from subsystem_index WHERE (protein LIKE ?";
         if (defined($all) && ($all == 2)) {
 	  $sql .= " AND (variant != '-1')";
 	  $sql .= " AND (variant != '*-1')";
@@ -20443,7 +20454,7 @@ sub subsystems_for_genome {
         $sql .= ")";
 
         eval {
-            $subsystem_data = $rdbH->SQL($sql);
+            $subsystem_data = $rdbH->SQL($sql, 0, $like_pat);
         };
     }
 
@@ -21743,28 +21754,28 @@ sub get_genome_subsystem_data {
         my $dbh = $rdbH->{_dbh};
         local $dbh->{RaiseError} = 1;
         local $dbh->{PrintError} = 0;
-	my $constraint = "WHERE (protein like 'fig\|$genomeID.peg.%')";
+	my $like_pat = "fig|${genomeID}.peg.%";
+	my $sql = qq(SELECT DISTINCT subsystem,role,protein,variant
+                     FROM subsystem_index
+                     WHERE (protein LIKE ?));
 	if (! $all)
 	{
-	    $constraint = $constraint . " AND (variant != '-1') AND (variant != '0')";
-	    $constraint = $constraint . " AND (variant != '*-1') AND (variant != '*0')";
+	    $sql .= " AND (variant != '-1') AND (variant != '0')";
+	    $sql .= " AND (variant != '*-1') AND (variant != '*0')";
 	}
 
         eval {
-            $retVal = $rdbH->SQL(qq(SELECT DISTINCT subsystem,role,protein,variant
-                                            FROM subsystem_index
-                                            $constraint
-                                           ));
-
+            $retVal = $rdbH->SQL($sql, 0, $like_pat);
         };
     }
 
     if ($@ =~ /variant/)
     {
+        my $like_pat = "fig|${genomeID}.peg.%";
         $retVal = $rdbH->SQL(qq(SELECT DISTINCT subsystem,role,protein,variant
                                         FROM subsystem_index
-                                        WHERE (protein like 'fig\|$genomeID.peg.%')
-                                       ));
+                                        WHERE (protein LIKE ?)
+                                       ), 0, $like_pat);
     }
 
     for my $ent (@$retVal)
@@ -22833,49 +22844,58 @@ sub search_database {
   # get database handle
   my $dbh = $self->db_handle();
 
+  # Security: $query/$ss_query/@tokenized derive from the user search string and
+  # were interpolated straight into SQL (CWE-89). All queries below are now
+  # parameterized with ? placeholders + bind values; $limit is integer-validated.
+  $limit = ($limit =~ /^\d+$/) ? $limit : 100;
+
   # check exact organism name and id
-  my $result = $dbh->SQL("SELECT genome FROM genome WHERE LOWER(gname)='$query' OR genome='$query'");
+  my $result = $dbh->SQL("SELECT genome FROM genome WHERE LOWER(gname)=? OR genome=?", undef, $query, $query);
   if (scalar(@$result) > 0) { return { type => 'organism', result => $result->[0]->[0] }; }
 
   # check exact subsystem
-  $result = $dbh->SQL("SELECT subsystem FROM subsystem_index WHERE LOWER(subsystem)='$ss_query'");
+  $result = $dbh->SQL("SELECT subsystem FROM subsystem_index WHERE LOWER(subsystem)=?", undef, $ss_query);
   if (scalar(@$result) > 0) { return { type => 'subsystem', result => $result->[0]->[0] }; }
 
   # check fig-id
-  $result = $dbh->SQL("SELECT id FROM features WHERE id='$query'");
+  $result = $dbh->SQL("SELECT id FROM features WHERE id=?", undef, $query);
   if (scalar(@$result) > 0) { return { type => 'feature', result => $result->[0]->[0] }; }
 
   # check unique alias
-  $result = $dbh->SQL("SELECT id FROM ext_alias WHERE alias='$query'");
+  $result = $dbh->SQL("SELECT id FROM ext_alias WHERE alias=?", undef, $query);
   if (scalar(@$result) > 0) { return { type => 'feature', result => $result->[0]->[0] }; }
 
   # exact search failed, sum up all the fuzzy searches
   my $return_value;
 
   # check functional role
-  $result = $dbh->SQL("SELECT DISTINCT role, subsystem FROM subsystem_index WHERE LOWER(role) LIKE '%" . $query . "%'");
+  $result = $dbh->SQL("SELECT DISTINCT role, subsystem FROM subsystem_index WHERE LOWER(role) LIKE ?", undef, '%' . $query . '%');
   if (scalar(@$result) > 0) { push(@$return_value, { type => 'functional_role', result => $result }); }
 
   # check organism name and domain
-  $result = $dbh->SQL("SELECT DISTINCT genome, gname, maindomain FROM genome WHERE LOWER(gname) LIKE '%" . $query . "%' OR LOWER(maindomain)='$query'");
+  $result = $dbh->SQL("SELECT DISTINCT genome, gname, maindomain FROM genome WHERE LOWER(gname) LIKE ? OR LOWER(maindomain)=?", undef, '%' . $query . '%', $query);
   if (scalar(@$result) > 0) { push(@$return_value, { type => 'organism', result => $result }); }
 
   # check aliases
-  $result = $dbh->SQL("SELECT DISTINCT id, genome FROM features WHERE LOWER(aliases) like '%". $query . "%'");
+  $result = $dbh->SQL("SELECT DISTINCT id, genome FROM features WHERE LOWER(aliases) like ?", undef, '%' . $query . '%');
   if (scalar(@$result)) { push(@$return_value, { type => 'feature', result => $result }); }
 
   # check subsystem
-  $result = $dbh->SQL("SELECT DISTINCT subsystem FROM subsystem_index WHERE LOWER(subsystem) LIKE '%" . $ss_query . "%'");
+  $result = $dbh->SQL("SELECT DISTINCT subsystem FROM subsystem_index WHERE LOWER(subsystem) LIKE ?", undef, '%' . $ss_query . '%');
   if (scalar(@$result) > 0) { push(@$return_value, { type => 'subsystem', result => $result }); }
 
   # check for extended search
   unless ($cgi->param('quick_search')) {
     my @tokens;
+    my @token_binds;
     foreach (@tokenized) {
-      push(@tokens, "LOWER(role) LIKE '%" . $_ . "%'");
+      push(@tokens, "LOWER(role) LIKE ?");
+      push(@token_binds, '%' . $_ . '%');
     }
     my $comp = join(' AND ', @tokens);
-    $result = $dbh->SQL("SELECT DISTINCT prot, role, gname, org, maindomain FROM roles JOIN genome ON roles.org=genome.genome WHERE prot LIKE 'fig%' AND " . $comp . " LIMIT $limit");
+    $result = (@tokens)
+      ? $dbh->SQL("SELECT DISTINCT prot, role, gname, org, maindomain FROM roles JOIN genome ON roles.org=genome.genome WHERE prot LIKE 'fig%' AND " . $comp . " LIMIT $limit", undef, @token_binds)
+      : [];
     if (scalar(@$result) > 0) { 
 	    # roles can contain a peg more than once, and we just need to get the last entry for each peg
 	    my $flatten;
@@ -25637,7 +25657,7 @@ package FIG;
     sub DESTROY
     {
 	my($self) = @_;
-	print STDERR "Destroy cache $self $$\n";
+	#print STDERR "Destroy cache $self $$\n";
     }
 
     sub load_cache
